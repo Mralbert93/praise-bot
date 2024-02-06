@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 from flask import Flask
 from slackeventsapi import SlackEventAdapter
 from pymongo.mongo_client import MongoClient
+import re
 
 env_path = Path('.') / '.env'
 load_dotenv(dotenv_path=env_path)
@@ -114,11 +115,11 @@ def get_user_praises(user_id):
 
     sorted_praises = sorted(praises, key=lambda x: x.get('upvotes', 0), reverse=True)
 
-    message = f"*Your praises:*\n"
+    message = f"*<@{user_id}> praises:*\n"
     for idx, praise in enumerate(sorted_praises, start=1):
         upvotes = praise.get('upvotes', 0)
         reason = praise.get('reason', 'No reason provided')
-        message += f"{idx}.{reason} ({upvotes} points)\n"
+        message += f"{idx}.{reason.capitalize()} ({upvotes} upvotes)\n"
 
     return message
 
@@ -136,17 +137,23 @@ def message(payload):
     if user_id == bot_id:
         return
     
-    if text.lower() == "my praises":
-        result = get_user_praises(user_id)
+    if text.lower().startswith(";praises"):
+        if text.lower() == ";praises":
+            result = get_user_praises(user_id)
+        else:
+            match = re.match(r";praises <@(\w+)>", text)
+            if match:
+                user_id = match.group(1)
+                result = get_user_praises(user_id)
 
         if result is None:
-            client.chat_postEphemeral(channel=channel_id, text=f"<@{user_id}>, you don't have any praises yet.", user=user_id)
+            client.chat_postMessage(channel=channel_id, text=f"<@{user_id}> doesn't have any praises yet.")
             return
         else:
-            client.chat_postEphemeral(channel=channel_id, text=f"{result}", user=user_id)
+            client.chat_postMessage(channel=channel_id, text=f"{result}")
             return
     
-    if text.lower() == "top praised":
+    if text.lower() == ";top":
         top_users = get_top_users()
 
         response_message = "*Top 10 Users:*\n"
@@ -169,7 +176,7 @@ def message(payload):
 
         client.reactions_add(channel=channel_id, name='heavy_plus_sign', timestamp=ts)
 
-        post = client.chat_postMessage(channel=channel_id, text=f"<@{mentioned_user_id}> received a praise from <@{user_id}> for {reason}\n\nThey now have *1* point for this and *{upvotes}* points total 👏", thread_ts=ts)
+        post = client.chat_postMessage(channel=channel_id, text=f"<@{mentioned_user_id}> received a praise from <@{user_id}> for {reason}\n\nThey now have *1 upvote* for this and *{upvotes} upvotes* total 👏", thread_ts=ts)
 
         record_post(mentioned_user_id, ts, post['ts'])
     return
@@ -190,8 +197,13 @@ def reaction_added(payload):
     if praised is None or praiser is None or reason is None or reason_upvotes is None or total_upvotes is None or post_timestamp is None:
         client.chat_postEphemeral(channel=channel_id, text=f"<@{user_id}>, you cannot praise yourself or someone you've already praised for this reason!", user=user_id)
         return
+    
+    if reason_upvotes > 1:
+        reason_upvotes = f'*{reason_upvotes} upvotes*'
+    else:
+        reason_upvotes = f'*{reason_upvotes} upvote*'
 
-    post = client.chat_update(channel=channel_id, ts=post_timestamp, text=f"<@{praised}> received a praise from <@{praiser}> for {reason}\n\nThey now have *{reason_upvotes}* point for this and *{total_upvotes}* points total 👏")
+    post = client.chat_update(channel=channel_id, ts=post_timestamp, text=f"<@{praised}> received a praise from <@{praiser}> for {reason}\n\nThey now have {reason_upvotes} for this and *{total_upvotes} upvotes* total 👏")
     record_post(praised, ts, post['ts'])
 
 @slack_event_adapter.on('reaction_removed')
@@ -208,11 +220,16 @@ def reaction_added(payload):
     praised, praiser, reason, reason_upvotes, total_upvotes, post_timestamp = record_vote(ts, user_id, 'unreaction')
 
     if praised is None or praiser is None or reason is None or reason_upvotes is None or total_upvotes is None or post_timestamp is None:
-        client.chat_postEphemeral(channel=channel_id, text=f"<@{user_id}>, you cannot praise yourself or someone you've already praised for this reason!", user=user_id)
+        client.chat_postEphemeral(channel=channel_id, text=f"<@{user_id}>, you cannot unpraise yourself or someone you've already praised for this reason!", user=user_id)
         return
+    
+    if reason_upvotes > 1:
+        reason_upvotes = f'*{reason_upvotes} upvotes*'
+    else:
+        reason_upvotes = f'*{reason_upvotes} upvote*'
 
-    post = client.chat_update(channel=channel_id, ts=post_timestamp, text=f"<@{praised}> received a praise from <@{praiser}> for {reason}\n\nThey now have *{reason_upvotes}* point for this and *{total_upvotes}* points total 👏")
+    post = client.chat_update(channel=channel_id, ts=post_timestamp, text=f"<@{praised}> received a praise from <@{praiser}> for {reason}\n\nThey now have {reason_upvotes} for this and *{total_upvotes} upvotes* total 👏")
     record_post(praised, ts, post['ts'])
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run()
