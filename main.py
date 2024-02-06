@@ -185,11 +185,15 @@ def message(payload):
 def reaction_added(payload):
     event = payload.get('event', {})
     user_id = event.get('user')
+    reaction = event.get('reaction')
     item = event.get('item', {})
     ts = item.get('ts')
     channel_id = item.get('channel')
 
     if user_id == bot_id:
+        return
+    
+    if reaction != "heavy_plus_sign":
         return
     
     praised, praiser, reason, reason_upvotes, total_upvotes, post_timestamp = record_vote(ts, user_id, 'reaction')
@@ -209,6 +213,7 @@ def reaction_added(payload):
 @slack_event_adapter.on('reaction_removed')
 def reaction_added(payload):
     event = payload.get('event', {})
+    reaction = event.get('reaction')
     user_id = event.get('user')
     item = event.get('item', {})
     ts = item.get('ts')
@@ -217,6 +222,9 @@ def reaction_added(payload):
     if user_id == bot_id:
         return
     
+    if reaction != "heavy_plus_sign":
+        return
+
     praised, praiser, reason, reason_upvotes, total_upvotes, post_timestamp = record_vote(ts, user_id, 'unreaction')
 
     if praised is None or praiser is None or reason is None or reason_upvotes is None or total_upvotes is None or post_timestamp is None:
