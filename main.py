@@ -240,4 +240,4 @@ def reaction_added(payload):
     record_post(praised, ts, post['ts'])
 
 if __name__ == "__main__":
-    app.run()
+    app.run(port=80)
